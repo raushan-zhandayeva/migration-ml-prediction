@@ -1,0 +1,551 @@
+---
+title: "Anti-immigrant Attitudes in Russia: Understanding Determinants and Predicting Attitudes"
+author: "Raushan Zhandayeva"
+date: "4/21/2022"
+output:
+  word_document: default
+  html_document: default
+---
+## We obtained a clean dataset, now we need to perform other tasks 
+```{r}
+setwd("/Volumes/GoogleDrive/My Drive/Coursework/Spring 2022/Machine Learning/Final project")
+anti <- read.csv("Attitudes.csv")
+dim(anti)
+```
+
+# Descriptive graphs 
+## Correlations plots 
+```{r}
+library(corrplot)
+anti.predictors <- dplyr::select(anti, 2:55)
+correlation = cor(anti.predictors, use ="complete")
+par(mfrow = c(1, 1))
+corrplot(correlation)
+corrplot(correlation, method=c("number"))
+```
+
+## PCA
+```{r}
+library(VIM)
+anti.pca=prcomp(anti, scale=T, center=T)
+anti.loadings = anti.pca$rotation
+anti.loadings
+par(mfrow = c(1, 1))
+
+library(ggfortify)
+autoplot(prcomp(anti, center=T, scale=T),  size=0, loadings=FALSE, 
+         loadings.colour='red', loadings.label = T, loadings.label.size = 4, 
+         loadings.label.colour='red',loadings.label.repel=T, 
+         frame=T, label=F, label.size=3) + 
+  geom_jitter(size=0) + theme_bw()  + theme(legend.position="none") 
+```
+
+##  Scree plot - proportional variance explained  
+```{r}
+anti.pca$sdev
+anti.var = anti.pca$sdev^2
+anti.var
+anti.pve = anti.var/sum(anti.var)
+anti.pve
+round(anti.pve,3)
+# First PC explains 8.3% of the variation
+# Second PC explains 6.2% of the variation 
+
+library(ggplot2)
+
+#plotting PVE
+plot(anti.pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained ", ylim = c(0, 1), type = "b")
+
+#plotting cumulative PVE
+plot(cumsum(anti.pve), xlab = "Principal Component ", ylab = " Cumulative Proportion of Variance Explained ", ylim = c(0,1), type = "b")
+```
+
+# Data Partition 
+```{r}
+anti$attitude <- as.factor(anti$attitude)
+levels(anti$attitude)
+smp_size = floor(0.8* nrow(anti))
+## set the seed to make your partition reproducible
+set.seed(1234)
+train_ind = sample(seq_len(nrow(anti)), size = smp_size)
+train_anti = anti[train_ind, ]
+test_anti = anti[-train_ind, ]
+```
+
+# Cross-validation 10 folds
+```{r}
+set.seed(1234)
+cvseeds = vector(mode = "list", length = 11) #k+1
+for(i in 1:11) cvseeds[[i]] <- sample.int(1000, 51) #number of tuning parameter combinations
+cvseeds[[11]] <- sample.int(1000, 1) 
+
+library(caret)
+set.seed(1234)
+train_control = trainControl(method="cv", #method
+                             number=10, #number of folds
+                             savePredictions=T, 
+                             classProbs=T, 
+                             summaryFunction=twoClassSummary,
+                             sampling="up", seeds=cvseeds) #upsampling to correct for class imbalance
+```
+
+
+## Parametric - logit 
+```{r}
+set.seed(1234)
+logit = train(make.names(attitude) ~., data = train_anti, 
+                 method = "glmnet", 
+                 family="binomial", 
+                 metric = "ROC",
+                 trControl=train_control)
+
+logit
+
+pred.logit.prob = predict(logit, newdata = test_anti, type = "prob")
+pred.logit.prob <- pred.logit.prob$X1
+
+pred.logit.class <- ifelse(pred.logit.prob >= 0.5, 1, 0)
+pred.logit.class
+table(pred.logit.class)
+
+table(test_anti$attitude)
+
+cm.logit <- confusionMatrix(as.factor(pred.logit.class), as.factor(test_anti$attitude), positive = "1")
+cm.logit
+
+bal.logit <- cm.logit$byClass["Balanced Accuracy"]
+```
+
+## Parametric models - shrinkage - ridge, lasso
+```{r}
+set.seed(1234)
+ridge.lasso = train(make.names(attitude) ~., data = train_anti, 
+                 method = "glmnet", 
+                 family="binomial", 
+                 metric = "ROC",
+                 trControl=train_control, 
+                 tuneGrid = expand.grid(alpha =0:1,
+                 lambda = seq(0.001,0.5,by = 0.001)))
+
+ridge.lasso
+plot(ridge.lasso)
+ridge.lasso$bestTune #picks ridge 
+max((ridge.lasso$results)$ROC)
+round(coef(ridge.lasso$finalModel, ridge.lasso$bestTune$lambda), 2)
+
+pred.ridge.prob = predict(ridge.lasso, newdata = test_anti, type = "prob")
+pred.ridge.prob <- pred.ridge.prob$X1
+
+pred.ridge.class <- ifelse(pred.ridge.prob >= 0.5, 1, 0)
+pred.ridge.class
+table(pred.ridge.class)
+
+table(test_anti$attitude)
+cm.ridge <- confusionMatrix(as.factor(pred.ridge.class), as.factor(test_anti$attitude), positive = "1")
+cm.ridge
+
+bal.ridge <- cm.ridge$byClass["Balanced Accuracy"]
+```
+
+
+## Lasso 
+```{r}
+set.seed(1234)
+lasso = train(make.names(attitude) ~ ., data = train_anti, 
+                 method = "glmnet", 
+                 family="binomial", 
+                 metric = "ROC",
+                 trControl=train_control, 
+                 tuneGrid = expand.grid(alpha =1,
+                 lambda = seq(0.001,0.5,by = 0.001)))
+
+lasso
+plot(lasso)
+lasso$bestTune 
+max((lasso$results)$ROC)
+round(coef(lasso$finalModel,lasso$bestTune$lambda), 2)
+
+pred.lasso.prob = predict(lasso, newdata = test_anti, type = "prob")
+pred.lasso.prob <- pred.lasso.prob$X1
+
+pred.lasso.class <- ifelse(pred.lasso.prob >= 0.5, 1, 0)
+pred.lasso.class
+table(pred.lasso.class)
+
+table(test_anti$attitude)
+cm.lasso <- confusionMatrix(as.factor(pred.lasso.class), as.factor(test_anti$attitude), positive = "1")
+cm.lasso
+
+bal.lasso <- cm.lasso$byClass["Balanced Accuracy"]
+```
+
+## LDA 
+```{r}
+library(caret)
+set.seed(1234)
+
+
+lda = train(make.names(attitude) ~ ., data = train_anti, 
+                 method = "lda", 
+                 trControl=train_control)
+
+lda
+summary(lda)
+
+pred.lda.prob= predict(lda, newdata = test_anti, type = "prob")
+pred.lda.prob <- pred.lda.prob$X1
+
+pred.lda.class<- ifelse(pred.lda.prob >= 0.5, 1, 0)
+pred.lda.class
+table(pred.lda.class)
+
+table(test_anti$attitude)
+cm.lda <- confusionMatrix(as.factor(pred.lda.class), as.factor(test_anti$attitude), positive = "1")
+cm.lda
+
+bal.lda <- cm.lda$byClass["Balanced Accuracy"]
+```
+
+# Non-parametric models 
+```{r}
+#R package for CART used in ISLR
+library(tree)
+
+#prettier visuals for CART
+library(rpart)
+
+#package for prettier variable importance plots
+require(vip)
+
+#package for partial dependence plots
+require(pdp)
+
+library(rpart.plot)
+```
+
+## KNN
+```{r}
+library(caret)
+set.seed(1234)
+knnGrid <-  expand.grid(k = c(1:50))
+
+knn = train(make.names(attitude) ~ ., data = train_anti, 
+                 method = "knn", 
+                 trControl=train_control,
+                 tuneGrid = knnGrid)
+knn
+summary(knn)
+plot(knn)
+knn$finalModel  
+
+pred.knn.prob = predict(knn, newdata = test_anti, type = "prob")
+pred.knn.prob <- pred.knn.prob$X1
+
+pred.knn.class <- ifelse(pred.knn.prob >= 0.5, 1, 0)
+pred.knn.class
+table(pred.knn.class)
+
+table(test_anti$attitude)
+cm.knn <- confusionMatrix(as.factor(pred.knn.class), as.factor(test_anti$attitude), positive = "1")
+cm.knn
+
+bal.knn <- cm.knn$byClass["Balanced Accuracy"]
+```
+
+## Basic classification tree - RPART package
+#see accuracy for different cost complexity parameters
+#caret/rpart finds optimal cost complexity parameter and prunes tree
+#pruned tree is found in finalModel
+```{r}
+library(rpart)
+train_anti$attitude <- as.factor(train_anti$attitude)
+test_anti$attitude <- as.factor(test_anti$attitude)
+
+set.seed(1234)
+trgrid = expand.grid(cp = seq(0,0.05,0.001))
+train.rpart.caret = train(make.names(attitude) ~., data = train_anti,
+                            method = "rpart", #this tells it to build tree
+                            trControl = train_control,#note this control function is separate from rpart control function
+                            tuneGrid = trgrid,
+                            control=rpart::rpart.control(cp=0,
+                                              minsplit = 10,
+                                               minbucket = 10))
+
+train.rpart.caret
+train.rpart.caret$finalModel
+plot(train.rpart.caret$finalModel)
+text(train.rpart.caret$finalModel, pretty=1)
+
+
+pred.tree.prob = predict(train.rpart.caret, newdata = test_anti, type = "prob")
+pred.tree.prob <- pred.tree.prob$X1
+
+pred.tree.class <- ifelse(pred.tree.prob >= 0.5, 1, 0)
+pred.tree.class
+table(pred.tree.class)
+
+cm.tree <- confusionMatrix(as.factor(pred.tree.class), as.factor(test_anti$attitude), positive = "1")
+cm.tree
+
+bal.tree <- cm.tree$byClass["Balanced Accuracy"]
+
+library(vip)
+vi_scores = vi(train.rpart.caret)
+vi_scores
+vip(vi_scores) #this is nicely a ggplot object so you can manipulate
+#most important indicator is middle class
+```
+
+## Bagging - bootstrap aggregating - ensemble method #1 
+## Averages lots of decision tree together 
+## Problem - the trees are correlated
+```{r}
+table(train_anti$attitude)
+table(test_anti$attitude)
+
+set.seed(1234)
+train.bag.caret = train(make.names(attitude) ~., data=train_anti,
+                          method = "treebag", #this tells 
+                          tuneLength = 30,
+                          trControl = train_control)
+
+train.bag.caret
+
+pred.bag.prob = predict(train.bag.caret, newdata = test_anti, type = "prob")
+pred.bag.prob <- pred.bag.prob$X1
+
+pred.bag.class <- ifelse(pred.bag.prob >= 0.5, 1, 0)
+pred.bag.class
+table(pred.tree.class)
+
+cm.bag <- confusionMatrix(as.factor(pred.bag.class), as.factor(test_anti$attitude), positive = "1")
+cm.bag
+
+bal.bag  <- cm.bag$byClass["Balanced Accuracy"]
+
+#VARIABLE IMPORTANCE PLOT
+vi_scores = vi(train.bag.caret)
+vip(vi_scores) 
+``` 
+
+## Random Forest
+## Create a large number of bootstrapped decision trees, but vary the number of predictors you feed each tree in order to decorrelate the predictions.
+```{r}
+mtry = sqrt(ncol(train_anti))
+tunegrid = expand.grid(.mtry=mtry)
+set.seed(1234)
+train.rf.caret = train(make.names(attitude) ~., 
+                       data=train_anti,
+                        method = "rf", 
+                        ntree=500,
+                        metric='Accuracy', 
+                        tuneGrid=tunegrid,
+                        trControl = train_control)
+
+train.rf.caret
+
+pred.rf.prob = predict(train.rf.caret, newdata = test_anti, type = "prob")
+pred.rf.prob <- pred.rf.prob$X1
+
+pred.rf.class <- ifelse(pred.rf.prob >= 0.5, 1, 0)
+pred.rf.class
+table(pred.rf.class)
+
+cm.rf <- confusionMatrix(as.factor(pred.rf.class), as.factor(test_anti$attitude), positive = "1")
+cm.rf
+
+bal.rf <- cm.rf$byClass["Balanced Accuracy"]
+
+#VARIABLE IMPORTANCE PLOT
+vi_scores = vi(train.rf.caret)
+vip(vi_scores)
+
+#Separation plot
+require(separationplot)
+test.attitude <- test_anti$attitude
+test.attitude <- as.numeric(test.attitude)
+test.attitude <- as.vector(test.attitude)
+pred.rf.class
+?separationplot
+separationplot(pred.rf.class, test.attitude)
+```
+
+## Gradient Boosting Method - enssemble method 2 -Grow trees sequentially to learn from results of previous
+trees 
+```{r}
+set.seed(1234)
+train.gbm.caret = train(make.names(attitude) ~ ., 
+                  data = train_anti, 
+                 method = "gbm", 
+                 trControl = train_control,
+                 verbose=FALSE)
+
+train.gbm.caret
+
+pred.boost.prob = predict(train.gbm.caret, newdata = test_anti, type = "prob")
+pred.boost.prob <- pred.boost.prob$X1
+
+pred.boost.class <- ifelse(pred.boost.prob >= 0.5, 1, 0)
+pred.boost.class
+table(pred.boost.class)
+
+cm.boost <- confusionMatrix(as.factor(pred.boost.class), as.factor(test_anti$attitude), positive = "1")
+cm.boost
+
+bal.boost <- cm.boost$byClass["Balanced Accuracy"]
+
+#VARIABLE IMPORTANCE PLOT
+library(gbm)
+library(vip)  
+vi_scores = vi(train.gbm.caret)
+vip(vi_scores)
+```
+
+## SVM - SVM provide a more flexible approach for non-separable and non-linear data.
+```{r}
+set.seed(1234)
+# Fit the linear
+svm.caret.linear = train(make.names(attitude) ~., 
+              data = train_anti, 
+              method = "svmLinear", 
+              trControl = train_control,  
+              preProcess = c("center","scale"))
+              
+#View the model
+svm.caret.linear
+
+pred.svm.linear.prob = predict(svm.caret.linear, newdata = test_anti, type = "prob")
+pred.svm.linear.prob <- pred.svm.linear.prob$X1
+
+pred.svm.linear.class <- ifelse(pred.svm.linear.prob >= 0.5, 1, 0)
+pred.svm.linear.class
+table(pred.svm.linear.class)
+
+svm.linear.cm = confusionMatrix(as.factor(pred.svm.linear.class), as.factor(test_anti$attitude), positive = "1")
+svm.linear.cm
+
+#Computing SVM using poly basis kernel:
+# Fit the poly
+svm.caret.poly = train(make.names(attitude) ~., 
+                       data = train_anti, 
+                       method = "svmPoly", 
+                       trControl = train_control, 
+                       preProcess = c("center","scale"))
+
+svm.caret.poly
+
+pred.svm.poly.prob = predict(svm.caret.poly, newdata = test_anti, type = "prob")
+pred.svm.poly.prob <- pred.svm.poly.prob$X1
+
+pred.svm.poly.class <- ifelse(pred.svm.poly.prob >= 0.5, 1, 0)
+pred.svm.poly.class
+table(pred.svm.poly.class)
+
+svm.poly.cm = confusionMatrix(as.factor(pred.svm.poly.class), as.factor(test_anti$attitude), positive = "1")
+svm.poly.cm 
+
+#Computing SVM using radial basis kernel:
+# Fit the radial
+svm.caret.radial = train(make.names(attitude) ~., 
+              data = train_anti, 
+              method = "svmRadial", 
+              trControl = train_control, 
+              preProcess = c("center","scale"))
+
+svm.caret.radial
+
+pred.svm.radial.prob = predict(svm.caret.radial, newdata = test_anti, type = "prob")
+pred.svm.radial.prob <- pred.svm.radial.prob$X1
+
+pred.svm.radial.class <- ifelse(pred.svm.radial.prob >= 0.5, 1, 0)
+pred.svm.radial.class
+table(pred.svm.radial.class)
+
+svm.radial.cm = confusionMatrix(as.factor(pred.svm.radial.class), as.factor(test_anti$attitude), positive = "1")
+svm.radial.cm
+
+#plot training results
+results = resamples(list(svm.linear=svm.caret.linear, svm.poly=svm.caret.poly, svm.radial=svm.caret.radial))
+summary(results)
+dotplot(results)
+
+#compare Accuracy
+bal.svm.linear <- svm.linear.cm$byClass["Balanced Accuracy"]
+bal.svm.poly <- svm.poly.cm$byClass["Balanced Accuracy"]
+bal.svm.rad <- svm.radial.cm$byClass["Balanced Accuracy"]
+```
+
+
+## Model Comparisons
+```{r}
+results <- rbind(bal.logit, bal.ridge, bal.lasso, bal.lda, bal.knn, bal.tree, bal.bag, bal.rf, bal.boost, 
+                 bal.svm.linear, bal.svm.poly, bal.svm.rad)
+results <- as.data.frame(results)
+results$models <- rownames(results)
+results$accuracy <- results$`Balanced Accuracy`
+results <- results[,2:3]
+rownames(results) <- NULL
+
+ggplot(results, aes(y=accuracy, x = models))+ geom_point(size = 5) + ylim(0.45, 0.65)
+
+library(pROC)
+
+pred.logit.prob <- as.numeric(pred.logit.prob)
+roc.logit <- roc(test_anti[,1], pred.logit.prob)
+
+pred.ridge.prob <- as.numeric(pred.ridge.prob)
+roc.ridge <- roc(test_anti[,1], pred.ridge.prob)
+
+pred.lasso.prob <- as.numeric(pred.lasso.prob)
+roc.lasso <- roc(test_anti[,1], pred.lasso.prob)
+
+pred.lda.prob <- as.numeric(pred.lda.prob)
+roc.lda <- roc(test_anti[,1], pred.lda.prob)
+
+pred.knn.prob <- as.numeric(pred.knn.prob)
+roc.knn <- roc(test_anti[,1], pred.knn.prob)
+
+pred.tree.prob <- as.numeric(pred.tree.prob)
+roc.tree<- roc(test_anti[,1], pred.tree.prob)
+
+pred.bag.prob <- as.numeric(pred.bag.prob)
+roc.bag<- roc(test_anti[,1], pred.bag.prob)
+
+pred.rf.prob <- as.numeric(pred.rf.prob)
+roc.rf <- roc(test_anti[,1], pred.rf.prob)
+
+pred.boost.prob <- as.numeric(pred.boost.prob)
+roc.boost <- roc(test_anti[,1], pred.boost.prob)
+
+pred.svm.linear.prob <- as.numeric(pred.svm.linear.prob)
+roc.svm.linear <- roc(test_anti[,1], pred.svm.linear.prob)
+
+pred.svm.poly.prob <- as.numeric(pred.svm.poly.prob)
+roc.svm.poly<- roc(test_anti[,1], pred.svm.poly.prob)
+
+pred.svm.radial.prob <- as.numeric(pred.svm.radial.prob)
+roc.svm.radial<- roc(test_anti[,1], pred.svm.radial.prob)
+
+
+plot(roc.logit, col = "red", print.auc = TRUE, print.auc.y= 0.6, print.auc.x = 0)
+plot(roc.ridge, add=TRUE, col = "green", print.auc = TRUE, print.auc.y = 0.55, print.auc.x = 0)
+plot(roc.lasso, add=TRUE, col = "blue", print.auc = TRUE, print.auc.y = 0.50, print.auc.x = 0)
+plot(roc.lda, add=TRUE, col = "brown", print.auc = TRUE, print.auc.y = 0.45, print.auc.x = 0)
+plot(roc.knn, add=TRUE, col = "purple", print.auc = TRUE, print.auc.y = 0.40, print.auc.x = 0)
+plot(roc.tree, add=TRUE, col = "orange", print.auc = TRUE, print.auc.y = 0.35, print.auc.x = 0)
+plot(roc.bag, add=TRUE, col = "darkgreen", print.auc = TRUE, print.auc.y = 0.30, print.auc.x = 0)
+plot(roc.rf, add=TRUE, col = "darkgrey", print.auc = TRUE, print.auc.y = 0.25, print.auc.x = 0)
+plot(roc.boost, add=TRUE, col = "cadetblue", print.auc = TRUE, print.auc.y = 0.20,print.auc.x = 0)
+plot(roc.svm.linear, add=TRUE, col = "aquamarine", print.auc = TRUE, print.auc.y = 0.15, print.auc.x = 0)
+plot(roc.svm.poly, add=TRUE, col = "chocolate", print.auc = TRUE, print.auc.y = 0.10, print.auc.x = 0)
+plot(roc.svm.radial, add=TRUE, col = "cyan2", print.auc = TRUE, print.auc.y = 0.05, print.auc.x = 0)
+legend(1.4, 1.0, legend = c("logit", "ridge", "lasso", "lda", "knn", "tree", "bag", "rf", "boost", 
+                            "svm.linear", "svm.poly", "svm.radial"), col = c("red", "green", "blue", "brown",
+                            "purple", "orange", "darkgreen", "darkgrey", "cadetblue", "aquamarine", "chocolate", 
+                            "cyan2"), lty = 1, cex = 0.8 )
+
+
+
+
+
+```
