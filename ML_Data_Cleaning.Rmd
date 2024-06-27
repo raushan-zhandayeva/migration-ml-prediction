@@ -1,0 +1,498 @@
+---
+title: "Anti-immigrant Attitudes in Russia: Data Cleaning"
+author: "Raushan Zhandayeva"
+date: "3/17/2022"
+output: html_document
+---
+# Setting up 
+```{r}
+library(dplyr)
+setwd("/Volumes/GoogleDrive/My Drive/Coursework/Spring 2022/Machine Learning/Final project")
+main <- read.csv("WVS_Wave7_Russian_Federation.csv")
+main <- dplyr::select(main, c(157,166, 298:340))
+```
+
+# Data cleaning and transformation 
+## Dependent variable 1 - anti-migrant sentiment
+```{r}
+main %>% count(main$Q121..Impact.of.immigrants.on.the.development.of.the.country)
+main$attitude <- main$Q121..Impact.of.immigrants.on.the.development.of.the.country
+main$attitude <- na_if(main$attitude, -1)
+main$attitude <- na_if(main$attitude, -2)
+main$attitude <- ifelse(main$attitude == 1|main$attitude == 2, 1,0)
+sum(is.na(main$attitude)) 
+main %>% count(attitude)
+454/1810 #class imbalance: minority class is about 25% of all observations
+```
+
+## Dependent variable 2 - immigration ban 
+```{r}
+main %>% count(Q130..Immigration.policy.preference)
+main$ban <- main$Q130..Immigration.policy.preference
+main$ban <- na_if(main$ban, -1)
+main$ban <- na_if(main$ban, -2)
+main$ban <- ifelse(main$ban == 4, 1 ,0)
+sum(is.na(main$ban)) 
+main %>% count(ban)
+270/1810 #class imbalance: minority class is about 15% of all observations
+```
+## Predictor # 1 - Gender 
+```{r}
+main %>% count(Q260..Sex)
+main$male <- ifelse(main$Q260..Sex == 1, 1, 0)
+main %>% count(male)
+```
+
+## Predictor # 2 - Age 
+```{r}
+main %>% count(Q262..Age)
+main$age <- main$Q262..Age
+main %>% count(age)
+
+## Age group 1: 18-24
+main$age.g1<- ifelse(main$Q262..Age <= 24, 1, 0)
+main %>% count(age.g1)
+
+## Age group 2: 25-34
+main$age.g2<- ifelse(main$Q262..Age >= 25 & main$Q262..Age <= 34 , 1, 0)
+main %>% count(age.g2)
+
+## Age group 3: 35-44
+main$age.g3<- ifelse(main$Q262..Age >= 35 & main$Q262..Age <= 44 , 1, 0)
+main %>% count(age.g3)
+
+## Age group 4: 45-54
+main$age.g4<- ifelse(main$Q262..Age >= 45 & main$Q262..Age <= 54 , 1, 0)
+main %>% count(age.g4)
+
+## Age group 5: 55-64
+main$age.g5<- ifelse(main$Q262..Age >= 55 & main$Q262..Age <= 64 , 1, 0)
+main %>% count(age.g5)
+
+## Age group 6: 65+ 
+main$age.g6<- ifelse(main$Q262..Age >= 65, 1, 0)
+main %>% count(age.g6)
+```
+
+## Predictor # 3 - Country of Origin
+```{r}
+main %>% count(Q263..Respondent.immigrant)
+main$immigrant <- main$Q263..Respondent.immigrant
+main$immigrant <- na_if(main$immigrant, -2)
+main$immigrant <- ifelse(main$immigrant == 2, 1, 0)
+main %>% count(immigrant)
+```
+## Predictor #4 - Immigrant Mother 
+```{r}
+main %>% count(Q264..Mother.immigrant)
+main$im.mother <- main$Q264..Mother.immigrant
+main$im.mother <- na_if(main$im.mother, -1)
+main$im.mother <- na_if(main$im.mother, -2)
+main$im.mother <- ifelse(main$im.mother == 1, 1, 0)
+main %>% count(im.mother)
+```
+## Predictor #5 - Immigrant Father 
+```{r}
+main %>% count(Q265..Father.immigrant)
+main$im.father <- main$Q265..Father.immigrant
+main$im.father <- na_if(main$im.father, -1)
+main$im.father <- na_if(main$im.father, -2)
+main$im.father <- ifelse(main$im.father == 1, 1, 0)
+main %>% count(im.father)
+```
+## Predictor #6  - Citizenship 
+```{r}
+main %>% count(Q269..Respondent.citizen)
+main$citizen <- main$Q269..Respondent.citizen
+main$citizen  <- na_if(main$citizen , -2)
+main$citizen  <- ifelse(main$citizen  == 1, 1, 0)
+main %>% count(citizen )
+```
+## Predictor #7 - Household size (median = 2)
+```{r}
+main %>% count(Q270..Number.of.people.in.household)
+main$hh_size <- main$Q270..Number.of.people.in.household
+main %>% count(hh_size)
+main$hh_size <- ifelse(main$hh_size >0, main$hh_size, 0)
+main %>% count(hh_size)
+median(main$hh_size) #median is equal to 2
+
+main %>% count(Q270..Number.of.people.in.household)
+main$hh_size <- main$Q270..Number.of.people.in.household
+main %>% count(hh_size)
+main$hh_size  <- na_if(main$hh_size , -2)
+main %>% count(hh_size)
+main$hh_size <- ifelse(main$hh_size > 2, 1, 0)
+main %>% count(hh_size)
+```
+
+## Predictor #8 - Household language - Russian
+```{r}
+main %>% count(Q272..Language.at.home)
+main$rus_lang <- main$Q272..Language.at.home
+main$rus_lang <- ifelse(main$rus_lang == 3630, 1,0)
+main %>% count(rus_lang)
+```
+
+## Predictor #9 - Marrital status - partnered
+```{r}
+main %>% count(Q273..Marital.status)
+main$partnered <- main$Q273..Marital.status
+main$partnered  <- na_if(main$partnered , -2)
+main$partnered <- ifelse(main$partnered == 1|main$partnered == 2, 1, 0)
+main %>% count(partnered)
+```
+
+## Predictor #10 - Children 
+```{r}
+main %>% count(Q274..How.many.children.do.you.have)
+main$children <- main$Q274..How.many.children.do.you.have
+main$children  <- ifelse(main$children == 0, 0, 1)
+main %>% count(children)
+```
+
+## Predictor ##11 - Highest education level - Three groups
+```{r}
+main %>% count(Q275R..Highest.educational.level..Respondent..recoded.into.3.groups.)
+
+## Lower 
+main$ed.lower <- main$Q275R..Highest.educational.level..Respondent..recoded.into.3.groups.
+main$ed.lower <- na_if(main$ed.lower , -1)
+main$ed.lower <- ifelse(main$ed.lower == 1, 1, 0)
+main %>% count(ed.lower)
+
+## Middle
+main$ed.middle <- main$Q275R..Highest.educational.level..Respondent..recoded.into.3.groups.
+main$ed.middle <- na_if(main$ed.middle , -1)
+main$ed.middle <- ifelse(main$ed.middle == 2, 1, 0)
+main %>% count(ed.middle)
+
+## Higher
+main$ed.higher <- main$Q275R..Highest.educational.level..Respondent..recoded.into.3.groups.
+main$ed.higher <- na_if(main$ed.higher , -1)
+main$main$ed.higher <- ifelse(main$ed.higher == 3, 1, 0)
+main %>% count(ed.higher)
+```
+
+## Predictor #12 - Employment 
+```{r}
+main %>% count(Q279..Employment.status)
+
+## Full-time 
+main$full.time <- main$Q279..Employment.status
+main %>% count(full.time)
+main$full.time <- na_if(main$full.time, -1)
+main$full.time <- na_if(main$full.time, -2)
+main$full.time    <- ifelse(main$full.time  == 1, 1, 0)
+main %>% count(full.time)
+
+## Part-time
+main$part.time <- main$Q279..Employment.status
+main %>% count(part.time)
+main$part.time <- na_if(main$part.time, -1)
+main$part.time <- na_if(main$part.time, -2)
+main$part.time    <- ifelse(main$part.time  == 2, 1, 0)
+main %>% count(part.time)
+
+## Self-employed
+main$self.emp <- main$Q279..Employment.status
+main %>% count(self.emp)
+main$self.emp <- na_if(main$self.emp, -1)
+main$self.emp <- na_if(main$self.emp, -2)
+main$self.emp   <- ifelse(main$self.emp  == 3, 1, 0)
+main %>% count(self.emp)
+
+## Retired 
+main$retired <- main$Q279..Employment.status
+main %>% count(retired)
+main$retired <- na_if(main$retired, -1)
+main$retired<- na_if(main$retired, -2)
+main$retired  <- ifelse(main$retired  == 4, 1, 0)
+main %>% count(retired)
+
+## House Work 
+main$house.work <- main$Q279..Employment.status
+main %>% count(house.work)
+main$house.work <- na_if(main$house.work, -1)
+main$house.work<- na_if(main$house.work, -2)
+main$house.work  <- ifelse(main$house.work  == 5, 1, 0)
+main %>% count(house.work)
+
+## Student
+main$student <- main$Q279..Employment.status
+main %>% count(student)
+main$student <- na_if(main$student, -1)
+main$student<- na_if(main$student, -2)
+main$student <- ifelse(main$student == 6, 1, 0)
+main %>% count(student)
+
+## Unemployed
+main$unempl <- main$Q279..Employment.status
+main %>% count(unempl)
+main$unempl <- na_if(main$unempl, -1)
+main$unempl<- na_if(main$unempl, -2)
+main$unempl <- ifelse(main$unempl == 7, 1, 0)
+main %>% count(unempl)
+```
+## Predictor ## 13 Occuptation
+```{r}
+main %>% count(Q281..Respondent...Occupational.group)
+
+## Professional and technical 
+main$tech <- main$Q281..Respondent...Occupational.group
+main %>% count(tech)
+main$tech <- na_if(main$tech, -2)
+main$tech <- ifelse(main$tech == 1, 1, 0)
+main %>% count(tech)
+
+## Higher administrative 
+main$admin <- main$Q281..Respondent...Occupational.group
+main %>% count(admin)
+main$admin <- na_if(main$admin, -2)
+main$admin <- ifelse(main$admin == 2, 1, 0)
+main %>% count(admin)
+
+## Clerical 
+main$cleric <- main$Q281..Respondent...Occupational.group
+main %>% count(cleric)
+main$cleric <- na_if(main$cleric, -2)
+main$cleric <- ifelse(main$cleric == 3, 1, 0)
+main %>% count(cleric)
+
+## Sales
+main$sales <- main$Q281..Respondent...Occupational.group
+main %>% count(sales)
+main$sales <- na_if(main$sales, -2)
+main$sales <- ifelse(main$sales == 4, 1, 0)
+main %>% count(sales)
+
+## Service 
+main$serv <- main$Q281..Respondent...Occupational.group
+main %>% count(serv)
+main$serv<- na_if(main$serv, -2)
+main$serv <- ifelse(main$serv == 5, 1, 0)
+main %>% count(serv)
+
+## Skilled Worker 
+main$skill <- main$Q281..Respondent...Occupational.group
+main %>% count(skill)
+main$skill<- na_if(main$skill, -2)
+main$skill <- ifelse(main$skill == 6, 1, 0)
+main %>% count(skill)
+
+## Semi-skilled Worker
+main$semi.skill <- main$Q281..Respondent...Occupational.group
+main %>% count(semi.skill)
+main$semi.skill<- na_if(main$semi.skill, -2)
+main$semi.skill <- ifelse(main$semi.skill == 7, 1, 0)
+main %>% count(semi.skill)
+
+## Unskilled Worker 
+main$unskill <- main$Q281..Respondent...Occupational.group
+main %>% count(unskill)
+main$unskill<- na_if(main$unskill, -2)
+main$unskill <- ifelse(main$unskill == 8, 1, 0)
+main %>% count(unskill)
+
+## Farm Worker 
+main$farm.work <- main$Q281..Respondent...Occupational.group
+main %>% count(farm.work)
+main$farm.work<- na_if(main$farm.work, -2)
+main$farm.work <- ifelse(main$farm.work == 9, 1, 0)
+main %>% count(farm.work)
+
+## Farm Owner/Manager 
+main$farm.own <- main$Q281..Respondent...Occupational.group
+main %>% count(farm.own)
+main$farm.own<- na_if(main$farm.own, -2)
+main$farm.own <- ifelse(main$farm.own == 10, 1, 0)
+main %>% count(farm.own)
+
+```
+
+##Predictor #14 - Sector of Employment 
+```{r}
+main %>% count(Q284..Sector.of.employment)
+
+## Government or Public Institution
+main$govt <- main$Q284..Sector.of.employment
+main %>% count(govt)
+main$govt <- na_if(main$govt, -1)
+main$govt <- na_if(main$govt, -2)
+main$govt <- na_if(main$govt, -3)
+main$govt <- ifelse(main$govt == 1, 1, 0)
+main %>% count(govt)
+
+## Private Business or Industry 
+main$business <- main$Q284..Sector.of.employment
+main %>% count(business)
+main$business  <- na_if(main$business, -1)
+main$business <- na_if(main$business, -2)
+main$business <- na_if(main$business, -3)
+main$business <- ifelse(main$business == 2, 1, 0)
+main %>% count(business)
+
+## 
+main$npo <- main$Q284..Sector.of.employment
+main %>% count(npo)
+main$npo  <- na_if(main$npo, -1)
+main$npo <- na_if(main$npo, -2)
+main$npo<- na_if(main$npo, -3)
+main$npo <- ifelse(main$npo == 3, 1, 0)
+main %>% count(npo)
+```
+## Predcitor #15 - Chief Wage Earner 
+```{r}
+main %>% count(Q285..Are.you.the.chief.wage.earner.in.your.house)
+main$earner <- main$Q285..Are.you.the.chief.wage.earner.in.your.house
+main$earner <- na_if(main$earner, -1)
+main$earner <- na_if(main$earner, -2)
+main$earner <- ifelse(main$earner == 1, 1, 0)
+main %>% count(earner)
+```
+## Predictor #17 - Family Savings 
+```{r}
+main %>% count(Q286..Family.savings.during.past.year)
+main$savings <- main$Q286..Family.savings.during.past.year
+main$savings <- na_if(main$savings, -1)
+main$savings <- na_if(main$savings, -2)
+main$savings <- ifelse(main$savings == 1, 1, 0)
+main %>% count(savings)
+```
+## Predictor #18 - Perception of Social Class
+```{r}
+main %>% count(Q287..Social.class..subjective.)
+
+## Upper 
+main$cl.upper <- main$Q287..Social.class..subjective.
+main$cl.upper <- na_if(main$cl.upper, -1)
+main$cl.upper <- na_if(main$cl.upper, -2)
+main$cl.upper <- ifelse(main$cl.upper == 1, 1, 0)
+main %>% count(cl.upper)
+
+## Middle 
+main$cl.middle <- main$Q287..Social.class..subjective.
+main$cl.middle  <- na_if(main$cl.middle, -1)
+main$cl.middle  <- na_if(main$cl.middle, -2)
+main$cl.middle  <- ifelse(main$cl.middle == 2|main$cl.middle == 3, 1, 0)
+main %>% count(cl.middle)
+
+## Working
+main$cl.working <- main$Q287..Social.class..subjective.
+main$cl.working  <- na_if(main$cl.working, -1)
+main$cl.working  <- na_if(main$cl.working, -2)
+main$cl.working  <- ifelse(main$cl.working == 4, 1, 0)
+main %>% count(cl.working)
+
+## Lower 
+main$cl.lower <- main$Q287..Social.class..subjective.
+main$cl.lower <- na_if(main$cl.lower, -1)
+main$cl.lower <- na_if(main$cl.lower, -2)
+main$cl.lower <- ifelse(main$cl.lower == 5, 1, 0)
+main %>% count(cl.lower)
+```
+
+## Predictor #19 - Income level 
+```{r}
+main %>% count(Q288R..Income.level..Recoded.)
+
+#Low Income
+main$low.inc <- main$Q288R..Income.level..Recoded.
+main$low.inc  <- na_if(main$low.inc, -1)
+main$low.inc   <- na_if(main$low.inc, -2)
+main$low.inc  <- ifelse(main$low.inc == 1, 1, 0)
+main %>% count(low.inc)
+
+#Medium Income
+main$med.inc <- main$Q288R..Income.level..Recoded.
+main$med.inc  <- na_if(main$med.inc, -1)
+main$med.inc   <- na_if(main$med.inc, -2)
+main$med.inc  <- ifelse(main$med.inc == 2, 1, 0)
+main %>% count(med.inc)
+
+#High Income
+main$high.inc <- main$Q288R..Income.level..Recoded.
+main$high.inc <- na_if(main$high.inc, -1)
+main$high.inc   <- na_if(main$high.inc, -2)
+main$high.inc  <- ifelse(main$high.inc == 3, 1, 0)
+main %>% count(high.inc)
+```
+##Predcitor #20 - Religion 
+```{r}
+main %>% count(Q289..Religious.denominations...major.groups)
+
+## Non-practicing
+main$no.religion <- main$Q289..Religious.denominations...major.groups
+main$no.religion <- na_if(main$no.religion, -1)
+main$no.religion <- na_if(main$no.religion, -2)
+main$no.religion <- ifelse(main$no.religion == 0, 1, 0)
+main %>% count(no.religion)
+
+## Orthodox Christian 
+main$orthodox <- main$Q289..Religious.denominations...major.groups
+main$orthodox <- na_if(main$orthodox, -1)
+main$orthodox <- na_if(main$orthodox, -2)
+main$orthodox <- ifelse(main$orthodox == 3, 1, 0)
+main %>% count(orthodox)
+
+## Muslim 
+main$muslim <- main$Q289..Religious.denominations...major.groups
+main$muslim <- na_if(main$muslim, -1)
+main$muslim <- na_if(main$muslim, -2)
+main$muslim <- ifelse(main$muslim == 5, 1, 0)
+main %>% count(muslim)
+```
+
+## Predictor #21 - Ethnic group
+```{r}
+main %>% count(Q290..Ethnic.group)
+
+#Russian 
+main$eth.russian <- main$Q290..Ethnic.group
+main$eth.russian <- na_if(main$eth.russian, -1)
+main$eth.russian <- na_if(main$eth.russian, -2)
+main$eth.russian <- ifelse(main$eth.russian == 643001, 1, 0)
+main %>% count(eth.russian)
+
+#Tatar 
+main$eth.tatar <- main$Q290..Ethnic.group
+main$eth.tatar <- na_if(main$eth.tatar, -1)
+main$eth.tatar <- na_if(main$eth.tatar, -2)
+main$eth.tatar <- ifelse(main$eth.tatar  == 643002, 1, 0)
+main %>% count(eth.tatar)
+
+#Iranian and Central Asian
+main$eth.ca <- main$Q290..Ethnic.group
+main$eth.ca <- na_if(main$eth.ca, -1)
+main$eth.ca <- na_if(main$eth.ca, -2)
+main$eth.ca <- ifelse(main$eth.ca  == 643097, 1, 0)
+main %>% count(eth.ca)
+
+#North East Asian 
+main$eth.nea <- main$Q290..Ethnic.group
+main$eth.nea <- na_if(main$eth.nea, -1)
+main$eth.nea <- na_if(main$eth.nea, -2)
+main$eth.nea <- ifelse(main$eth.nea  == 643037, 1, 0)
+main %>% count(eth.nea)
+```
+
+## Clearing data frame 
+```{r}
+clean_attitude <- dplyr::select(main, c(46, 48, 50:66, 68:103))
+clean_policy <- dplyr::select(main, c(47,48, 50:66, 68:103))
+```
+
+# Focusing on Attitudes 
+## Missing data
+```{r}
+library(VIM)
+aggr(clean_attitude, prop = T, numbers = T)
+# KNN imputation 
+imp_knn_attitude = kNN(clean_attitude, k=5)
+imp_knn_attitude <- dplyr::select(imp_knn_attitude, c(1:55))
+aggr(imp_knn_attitude, plot=T, number=T)
+```
+## Saving clean and imputed dataset 
+```{r}
+write.csv(imp_knn_attitude,"/Volumes/GoogleDrive/My Drive/Coursework/Spring 2022/Machine Learning/Final project/Attitudes.csv", row.names = FALSE)
+```
