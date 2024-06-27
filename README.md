@@ -18,4 +18,4 @@ Previous studies relied on survey data using regression analysis, which tested o
 Unsupervised learning: I use a principal component analysis (PCA) to reduce dimensionality and see common patterns in the data. The data is centered and scaled.
 
 Supervised learning:  I create 12 models to identify the most important predictors as well as predict the attitudes. Parametric: Logit, Ridge, Lasso, LDA.
-Non-parametric: kNN, tree-based (CART, Bagging, Random Forest, Boosting), support Vector Machines(linear, polynomial, radial).
+Non-parametric: kNN, tree-based (CART, Bagging, Random Forest, Boosting), support vector machines(linear, polynomial, radial).
